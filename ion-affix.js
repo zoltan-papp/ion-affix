@@ -95,125 +95,131 @@ angular.module('ion-affix', ['ionic'])
             // we need $ionicScroll for adding the clone of affix element to the scroll container
             // $ionicScroll.element gives us that
             require: '^$ionicScroll',
-            link: function ($scope, $element, $attr, $ionicScroll) {
-                // get the affix's container. element will be affix for that container.
-                // affix's container will be matched by "affix-within-parent-with-class" attribute.
-                // if it is not provided, parent element will be assumed as the container
-                var $container;
-                if ($attr.affixWithinParentWithClass) {
-                    $container = getParentWithClass($element, $attr.affixWithinParentWithClass);
-                    if (!$container) {
-                        $container = $element.parent();
-                    }
+            compile: function ($element, $attr, transclude) {
+                //load the template first
+                //we need the template at this point before compiling starts
+                var clone = $element.clone();
+                //if directive is given an additional CSS class to apply to the clone, then apply it
+                if ($attr.affixClass) {
+                    clone.addClass($attr.affixClass);
                 }
-                else {
-                    $container = $element.parent();
-                }
+                // remove the directive matching attribute from the clone, so that an affix is not created for the clone as well.
+                clone.removeAttr('ion-affix').removeAttr('data-ion-affix').removeAttr('x-ion-affix');
+                var originalTemplate = angular.copy(angular.element('<div/>').append(clone).html());
+                //finally apply simple rules to be 'sticky'
+                clone = angular.element(originalTemplate).css({
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0
+                }).hide();
 
-                var scrollMin = 0;
-                var scrollMax = 0;
-                var scrollTransition = 0;
-                // calculate the scroll limits for the affix element and the affix's container
-                var calculateScrollLimits = function (scrollTop) {
-                    var containerPosition = position($container);
-                    var elementOffset = offset($element);
+                return {
+                    pre: function ($scope, $element, $attr, $ionicScroll) {
+                        //append the clone to the ionscroll container, and compile it in pre linking function
+                        angular.element($ionicScroll.element).append(clone);
+                        $compile(clone)($scope);
+                        // get the affix's container. element will be affix for that container.
+                        // affix's container will be matched by "affix-within-parent-with-class" attribute.
+                        // if it is not provided, parent element will be assumed as the container
+                        var $container;
 
-                    var containerTop = containerPosition.top;
-                    var containerHeight = containerPosition.height;
-
-                    var affixHeight = elementOffset.height;
-
-                    scrollMin = scrollTop + containerTop;
-                    scrollMax = scrollMin + containerHeight;
-                    scrollTransition = scrollMax - affixHeight;
-                };
-                // throttled version of the same calculation
-                var throttledCalculateScrollLimits = throttle(
-                    calculateScrollLimits,
-                    CALCULATION_THROTTLE_MS,
-                    {trailing: false}
-                );
-
-                var affixClone = null;
-
-                // creates the affix clone and adds it to DOM. by default it is put to top
-                var createAffixClone = function () {
-                    var clone = $element.clone().css({
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0
-                    });
-
-                    // if directive is given an additional CSS class to apply to the clone, then apply it
-                    if ($attr.affixClass) {
-                        clone.addClass($attr.affixClass);
-                    }
-
-                    // remove the directive matching attribute from the clone, so that an affix is not created for the clone as well.
-                    clone.removeAttr('ion-affix').removeAttr('data-ion-affix').removeAttr('x-ion-affix');
-
-                    angular.element($ionicScroll.element).append(clone);
-
-                    // compile the clone so that anything in it is in Angular lifecycle.
-                    $compile(clone)($scope);
-
-                    return clone;
-                };
-
-                // removes the affix clone from DOM. also deletes the reference to it in the memory.
-                var removeAffixClone = function () {
-                    if (affixClone)
-                        affixClone.remove();
-                    affixClone = null;
-                };
-
-                $scope.$on("$destroy", function () {
-                    // 2 important things on destroy:
-                    // remove the clone
-                    // unbind the scroll listener
-                    // see https://github.com/aliok/ion-affix/issues/1
-                    removeAffixClone();
-                    angular.element($ionicScroll.element).off('scroll');
-                });
-
-
-                angular.element($ionicScroll.element).on('scroll', function (event) {
-                    var scrollTop = (event.detail || event.originalEvent && event.originalEvent.detail).scrollTop;
-                    // when scroll to top, we should always execute the immediate calculation.
-                    // this is because of some weird problem which is hard to describe.
-                    // if you want to experiment, always use the throttled one and just click on the page
-                    // you will see all affix elements stacked on top
-                    if (scrollTop == 0) {
-                        calculateScrollLimits(scrollTop);
-                    }
-                    else {
-                        throttledCalculateScrollLimits(scrollTop);
-                    }
-
-                    // when we scrolled to the container, create the clone of element and place it on top
-                    if (scrollTop >= scrollMin && scrollTop <= scrollMax) {
-
-                        // we need to track if we created the clone just now
-                        // that is important since normally we apply the transforms in the animation frame
-                        // but, we need to apply the transform immediately when we add the element for the first time. otherwise it is too late!
-                        var cloneCreatedJustNow = false;
-                        if (!affixClone) {
-                            affixClone = createAffixClone();
-                            cloneCreatedJustNow = true;
+                        if ($attr.affixWithinParentWithClass) {
+                            $container = getParentWithClass($element, $attr.affixWithinParentWithClass);
+                            if (!$container) {
+                                $container = $element.parent();
+                            }
+                        }
+                        else {
+                            $container = $element.parent();
                         }
 
-                        // if we're reaching towards the end of the container, apply some nice translation to move up/down the clone
-                        // but if we're reached already to the container and we're far away than the end, move clone to top
-                        if (scrollTop > scrollTransition) {
-                            translateUp(affixClone[0], Math.floor(scrollTop - scrollTransition), cloneCreatedJustNow);
-                        } else {
-                            translateUp(affixClone[0], 0, cloneCreatedJustNow);
+                        var scrollMin = 0;
+                        var scrollMax = 0;
+                        var scrollTransition = 0;
+                        // calculate the scroll limits for the affix element and the affix's container
+                        var calculateScrollLimits = function (scrollTop) {
+                            var containerPosition = position($container);
+                            var elementOffset = offset($element);
+
+                            var containerTop = containerPosition.top;
+                            var containerHeight = containerPosition.height;
+
+                            var affixHeight = elementOffset.height;
+
+                            scrollMin = scrollTop + containerTop;
+                            scrollMax = scrollMin + containerHeight;
+                            scrollTransition = scrollMax - affixHeight;
+                        };
+                        // throttled version of the same calculation
+                        var throttledCalculateScrollLimits = throttle(
+                            calculateScrollLimits,
+                            CALCULATION_THROTTLE_MS,
+                            {trailing: false}
+                        );
+
+                        var affixClone = null;
+
+                        var createAffixClone = function () {
+                            clone.show();
+                            return clone;
                         }
-                    } else {
-                        removeAffixClone();
+
+                        // hides the affix clone from DOM. also deletes the reference to it in the memory.
+                        var removeAffixClone = function () {
+                            clone.hide();
+                            affixClone = null;
+                        };
+
+                        $scope.$on("$destroy", function () {
+                            // 2 important things on destroy:
+                            // remove the clone
+                            // unbind the scroll listener
+                            // see https://github.com/aliok/ion-affix/issues/1
+                            removeAffixClone();
+                            angular.element($ionicScroll.element).off('scroll');
+                        });
+
+
+                        angular.element($ionicScroll.element).on('scroll', function (event) {
+                            var scrollTop = (event.detail || event.originalEvent && event.originalEvent.detail).scrollTop;
+                            // when scroll to top, we should always execute the immediate calculation.
+                            // this is because of some weird problem which is hard to describe.
+                            // if you want to experiment, always use the throttled one and just click on the page
+                            // you will see all affix elements stacked on top
+                            if (scrollTop == 0) {
+                                calculateScrollLimits(scrollTop);
+                            }
+                            else {
+                                throttledCalculateScrollLimits(scrollTop);
+                            }
+
+                            // when we scrolled to the container, create the clone of element and place it on top
+                            if (scrollTop >= scrollMin && scrollTop <= scrollMax) {
+
+                                // we need to track if we created the clone just now
+                                // that is important since normally we apply the transforms in the animation frame
+                                // but, we need to apply the transform immediately when we add the element for the first time. otherwise it is too late!
+                                var cloneCreatedJustNow = false;
+                                if (!affixClone) {
+                                    affixClone = createAffixClone();
+                                    cloneCreatedJustNow = true;
+                                }
+
+                                // if we're reaching towards the end of the container, apply some nice translation to move up/down the clone
+                                // but if we're reached already to the container and we're far away than the end, move clone to top
+                                if (scrollTop > scrollTransition) {
+                                    translateUp(affixClone[0], Math.floor(scrollTop - scrollTransition), cloneCreatedJustNow);
+                                } else {
+                                    translateUp(affixClone[0], 0, cloneCreatedJustNow);
+                                }
+                            } else {
+                                removeAffixClone();
+                            }
+                        });
                     }
-                });
-            }
+                };
+            },
+
         }
     }]);
