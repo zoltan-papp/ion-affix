@@ -122,7 +122,8 @@ angular.module('ion-affix', ['ionic'])
                         // get the affix's container. element will be affix for that container.
                         // affix's container will be matched by "affix-within-parent-with-class" attribute.
                         // if it is not provided, parent element will be assumed as the container
-                        var $container;
+                        var $container,
+                        currentScroll = 0;
 
                         if ($attr.affixWithinParentWithClass) {
                             $container = getParentWithClass($element, $attr.affixWithinParentWithClass);
@@ -183,38 +184,42 @@ angular.module('ion-affix', ['ionic'])
 
                         angular.element($ionicScroll.element).on('scroll', function (event) {
                             var scrollTop = (event.detail || event.originalEvent && event.originalEvent.detail).scrollTop;
-                            // when scroll to top, we should always execute the immediate calculation.
-                            // this is because of some weird problem which is hard to describe.
-                            // if you want to experiment, always use the throttled one and just click on the page
-                            // you will see all affix elements stacked on top
-                            if (scrollTop == 0) {
-                                calculateScrollLimits(scrollTop);
-                            }
-                            else {
-                                throttledCalculateScrollLimits(scrollTop);
-                            }
-
-                            // when we scrolled to the container, create the clone of element and place it on top
-                            if (scrollTop >= scrollMin && scrollTop <= scrollMax) {
-
-                                // we need to track if we created the clone just now
-                                // that is important since normally we apply the transforms in the animation frame
-                                // but, we need to apply the transform immediately when we add the element for the first time. otherwise it is too late!
-                                var cloneCreatedJustNow = false;
-                                if (!affixClone) {
-                                    affixClone = createAffixClone();
-                                    cloneCreatedJustNow = true;
+                            if(currentScroll !== scrollTop) {
+                                currentScroll = scrollTop;
+                                // when scroll to top, we should always execute the immediate calculation.
+                                // this is because of some weird problem which is hard to describe.
+                                // if you want to experiment, always use the throttled one and just click on the page
+                                // you will see all affix elements stacked on top
+                                if (scrollTop == 0) {
+                                    calculateScrollLimits(scrollTop);
+                                }
+                                else {
+                                    throttledCalculateScrollLimits(scrollTop);
                                 }
 
-                                // if we're reaching towards the end of the container, apply some nice translation to move up/down the clone
-                                // but if we're reached already to the container and we're far away than the end, move clone to top
-                                if (scrollTop > scrollTransition) {
-                                    translateUp(affixClone[0], Math.floor(scrollTop - scrollTransition), cloneCreatedJustNow);
+                                // when we scrolled to the container, create the clone of element and place it on top
+                                if (scrollTop >= scrollMin && scrollTop <= scrollMax) {
+
+                                    // we need to track if we created the clone just now
+                                    // that is important since normally we apply the transforms in the animation frame
+                                    // but, we need to apply the transform immediately when we add the element for the first time. otherwise it is too late!
+                                    var cloneCreatedJustNow = false;
+                                    if (!affixClone) {
+                                        affixClone = createAffixClone();
+                                        cloneCreatedJustNow = true;
+                                    }
+
+                                    // if we're reaching towards the end of the container, apply some nice translation to move up/down the clone
+                                    // but if we're reached already to the container and we're far away than the end, move clone to top
+                                    if (scrollTop > scrollTransition) {
+                                        translateUp(affixClone[0], Math.floor(scrollTop - scrollTransition), cloneCreatedJustNow);
+                                    } else {
+                                        translateUp(affixClone[0], 0, cloneCreatedJustNow);
+                                    }
                                 } else {
-                                    translateUp(affixClone[0], 0, cloneCreatedJustNow);
+                                    removeAffixClone();
                                 }
-                            } else {
-                                removeAffixClone();
+
                             }
                         });
                     }
